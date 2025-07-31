@@ -38,7 +38,9 @@ export default function CheckoutPage() {
 
   return (
     <main style={{ padding: "20px", maxWidth: "600px", margin: "0 auto" }}>
-      <h1>会計ページ</h1>
+      <header style={{ textAlign: "center", padding: "10px 0", fontSize: "24px", fontWeight: "bold" }}>
+        会計ページ
+      </header>
 
       <h2>注文内容</h2>
       <ul>

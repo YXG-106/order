@@ -143,6 +143,8 @@ export default function MenuPage() {
         </ul>
       </main>
 
+
+
       {/* ✅ カート (右側) */}
       <aside className={styles.cart}>
         <h2 className={styles.cartTitle}>カート</h2>
@@ -199,5 +201,6 @@ export default function MenuPage() {
         )}
       </aside>
     </div>
+
   );
 }
