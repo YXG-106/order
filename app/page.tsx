@@ -1,16 +1,13 @@
-
-
-"use client"; // クライアントコンポーネント宣言、このコードはクライアント（ブラウザ）側で動く。  Next.js では何も書かなければサーバーコンポーネントになります。
+"use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter } from 'next/navigation';
 import styles from "./page.module.css";
 
-const MENU_API_URL = "https://9ipjty3nzf.microcms.io/api/v1/menu"; // microCMS のエンドポイント URL
+const MENU_API_URL = "https://9ipjty3nzf.microcms.io/api/v1/menu";
 
-// データをセットする配列を用意
 type MenuItem = {
   id: string;
   name: string;
@@ -23,59 +20,97 @@ type MenuItem = {
   };
 };
 
-export default function MenuPage() {
-// menu,cart 表示データを入れる配列、
-// setMenu,setCart は、menu,cart を更新する関数function
-  const [menu, setMenu] = useState<MenuItem[]>([]);
-  const [cart, setCart] = useState<MenuItem[]>([]);
-  const router = useRouter(); //画面移動で使用
+type CartItem = {
+  item: MenuItem;
+  quantity: number;
+};
 
-  // useEffect(() => { fetch(...); }, []); 画面の準備が終わったタイミングでmicroCMSからデータを取得する
+export default function MenuPage() {
+  const [menu, setMenu] = useState<MenuItem[]>([]);
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const router = useRouter();
+
   useEffect(() => {
-    // CMSからメニューデータ取得
     fetch(MENU_API_URL, {
       headers: {
         "X-API-KEY": process.env.NEXT_PUBLIC_MICROCMS_API_KEY || "",
       },
     })
-      // => はアロー関数といいます。functionを短く書いたのもです。
-      // 例　これを短く書いたものです
-      // .then(function(res) {
-      //   return res.json()
-      // })
-      // res.json();の戻り値が res に入ります。
-      .then((res) => res.json()) // 文字列からオブジェクトへ変換
-      .then((data) => setMenu(data.contents)); // res オブジェクト が data に入る return が呼ばれる
-      // 下記のように書き換えるとdataの中をブラウザ console で確認できます。
-      // .then((data) => {
-      //   setMenu(data.contents);
-      //   console.table(data.contents); // contents 配列をテーブル形式で表示
-      // });
+      .then((res) => res.json())
+      .then((data) => setMenu(data.contents));
 
- const saved = localStorage.getItem("cart");
-    if (saved) {
-      setCart(JSON.parse(saved));
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("cart");
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          const filtered = parsed.filter(
+            (entry: any) => entry.item && entry.item.price !== undefined
+          );
+          setCart(filtered);
+        } catch {
+          setCart([]);
+        }
+      }
     }
   }, []);
 
-  const addToCart = (item: MenuItem) => {
-    const updated = [...cart, item];
-    setCart(updated);
-    localStorage.setItem("cart", JSON.stringify(updated));
+  const addToCart = (item: MenuItem | undefined) => {
+    if (!item) return;
+
+    const existing = cart.find((entry) => entry.item.id === item.id);
+    let updatedCart: CartItem[] = [];
+
+    if (existing) {
+      updatedCart = cart.map((entry) =>
+        entry.item.id === item.id
+          ? { ...entry, quantity: entry.quantity + 1 }
+          : entry
+      );
+    } else {
+      updatedCart = [...cart, { item, quantity: 1 }];
+    }
+
+    setCart(updatedCart);
+    localStorage.setItem("cart", JSON.stringify(updatedCart));
   };
 
-  const removeFromCart = (indexToRemove: number) => {
-    const updated = cart.filter((_, i) => i !== indexToRemove);
-    setCart(updated);
-    localStorage.setItem("cart", JSON.stringify(updated));
+  const incrementCartQty = (id: string) => {
+    const updatedCart = cart.map((entry) =>
+      entry.item.id === id ? { ...entry, quantity: entry.quantity + 1 } : entry
+    );
+    setCart(updatedCart);
+    localStorage.setItem("cart", JSON.stringify(updatedCart));
   };
 
-  const total = cart.reduce((sum, item) => sum + item.price, 0);
+  const decrementCartQty = (id: string) => {
+    const updatedCart = cart
+      .map((entry) =>
+        entry.item.id === id
+          ? { ...entry, quantity: Math.max(1, entry.quantity - 1) }
+          : entry
+      )
+      .filter((entry) => entry.quantity > 0);
+    setCart(updatedCart);
+    localStorage.setItem("cart", JSON.stringify(updatedCart));
+  };
+
+  const removeFromCart = (idToRemove: string) => {
+    const updatedCart = cart.filter((entry) => entry.item.id !== idToRemove);
+    setCart(updatedCart);
+    localStorage.setItem("cart", JSON.stringify(updatedCart));
+  };
+
+  const total = cart.reduce((sum, entry) => {
+    const price = entry.item?.price || 0;
+    const quantity = entry.quantity || 0;
+    return sum + price * quantity;
+  }, 0);
 
   return (
     <div className={styles.container}>
       <main className={styles.menuList}>
-        <h1 className={styles.title}>မီနူး</h1>
+        <h1 className={styles.title}>メニュー</h1>
         <ul className={styles.list}>
           {menu.map((item) => (
             <li key={item.id} className={styles.item}>
@@ -91,34 +126,36 @@ export default function MenuPage() {
               <p className={styles.name}>
                 {item.name} — {item.price}円
               </p>
+
               <button
                 className={styles.addButton}
-                onClick={() => router.push(`/confirm/${item.id}`)}
+                onClick={() => addToCart(item)}
               >
                 追加
               </button>
-              {item.comment && <p className={styles.comment}>{item.comment}</p>}
+
+              {item.comment && (
+                <p className={styles.comment}>{item.comment}</p>
+              )}
               <hr className={styles.separator} />
             </li>
           ))}
         </ul>
-        <Link href="/cart" className={styles.checkoutLink}>
-          注文確認へ進む
-        </Link>
       </main>
 
+      {/* ✅ カート (右側) */}
       <aside className={styles.cart}>
-        <h2 className={styles.cartTitle}>မှာထားသည့်ပစ္စည်းများ</h2>
+        <h2 className={styles.cartTitle}>カート</h2>
         {cart.length === 0 ? (
-          <p className={styles.empty}>မသတ်မှတ်ရသေးပါ။</p>
+          <p className={styles.empty}>カートに商品がありません</p>
         ) : (
           <>
-            {cart.map((item, i) => (
-              <div key={`${item.id}-${i}`} className={styles.cartItem}>
-                {item.image && (
+            {cart.map((entry) => (
+              <div key={entry.item.id} className={styles.cartItem}>
+                {entry.item.image && (
                   <Image
-                    src={item.image.url}
-                    alt={item.name}
+                    src={entry.item.image.url}
+                    alt={entry.item.name}
                     width={60}
                     height={40}
                     className={styles.cartImage}
@@ -126,18 +163,38 @@ export default function MenuPage() {
                 )}
                 <div className={styles.cartInfo}>
                   <p className={styles.cartName}>
-                    {item.name} — {item.price}円
+                    {entry.item.name} × {entry.quantity} —{" "}
+                    {(entry.item.price * entry.quantity).toLocaleString()}円
                   </p>
+
+                  <div className={styles.qtyControl}>
+                    <button onClick={() => decrementCartQty(entry.item.id)}>
+                      −
+                    </button>
+                    <span>{entry.quantity}</span>
+                    <button onClick={() => incrementCartQty(entry.item.id)}>
+                      ＋
+                    </button>
+                  </div>
+
                   <button
                     className={styles.removeButton}
-                    onClick={() => removeFromCart(i)}
+                    onClick={() => removeFromCart(entry.item.id)}
                   >
-                    ဖျက်မည်
+                    取消
                   </button>
                 </div>
               </div>
             ))}
-            <p className={styles.total}>စုစုပေါင်း: {total.toLocaleString()}円</p>
+            <p className={styles.total}>合計: {total.toLocaleString()}円</p>
+
+            {/* ✅ ボタンをカート内に移動 */}
+            <button
+              className={styles.checkoutLink}
+              onClick={() => router.push("/checkout")}
+            >
+              お会計へ
+            </button>
           </>
         )}
       </aside>
